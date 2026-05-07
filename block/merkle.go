@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/hex"
+	"errors"
 	"math"
 	"sort"
 
 	"simple_eth/types"
 
+	"crypto/sha256"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -36,19 +38,106 @@ type MerkleNode struct {
 // NewMerkleTree builds a Merkle tree from arbitrary byte slices.
 func NewMerkleTree(data [][]byte) *MerkleTree {
 	// TODO: Lab 2, build Merkle tree bottom-up by hashing pairs.
-	panic("Not implemented yet")
+	if len(data) == 0 {
+		return &MerkleTree{}
+	}
+
+	var leaves []*MerkleNode
+	for i := 0; i < len(data); i++ {
+		var newMerkleNode MerkleNode
+		hash := sha256.Sum256(data[i])
+		newMerkleNode.Data = hash[:]
+		newMerkleNode.isLeft = true
+		leaves = append(leaves, &newMerkleNode)
+	}
+	if len(leaves)%2 == 1 {
+		copiedNode := duplicateNode(leaves[len(leaves)-1])
+		leaves = append(leaves, copiedNode)
+	}
+	nodes := make([]*MerkleNode, len(leaves))
+	copy(nodes, leaves)
+	for len(nodes) > 1 {
+		var nextLevel []*MerkleNode
+
+		for i := 0; i < len(nodes); i += 2 {
+			leftNode := nodes[i]
+			rightNode := nodes[i+1]
+			leftNode.isLeft = true
+			rightNode.isLeft = false
+
+			cat := append(leftNode.Data, rightNode.Data...)
+			parentHash := sha256.Sum256(cat)
+			parentNode := MerkleNode{
+				Left:   leftNode,
+				Right:  rightNode,
+				Parent: nil,
+				Data:   parentHash[:],
+				isLeft: (i/2)%2 == 0,
+			}
+			leftNode.Parent = &parentNode
+			rightNode.Parent = &parentNode
+			nextLevel = append(nextLevel, &parentNode)
+		}
+
+		nodes = nextLevel
+	}
+
+	root := nodes[0]
+
+	return &MerkleTree{
+		Root:   root,
+		leaves: leaves,
+	}
 }
 
 // SPVProof returns the Merkle path for the leaf at index.
 func (t *MerkleTree) SPVProof(index int) ([]ProofStep, error) {
 	// TODO: Lab 2, provide bottom-up sibling hashes for SPV proof.
-	panic("Not implemented yet")
+	if t == nil || t.Root == nil || len(t.leaves) == 0 {
+		return nil, errors.New("merkle tree is empty")
+	}
+
+	if index < 0 || index >= len(t.leaves) {
+		return nil, errors.New("index out of boundry")
+	}
+
+	curNode := t.leaves[index]
+	var proofStep []ProofStep
+
+	for curNode.Parent != nil {
+		if curNode.isLeft {
+			proofStep = append(proofStep, ProofStep{
+				Hash:          curNode.Parent.Right.Data,
+				SiblingOnLeft: false,
+			})
+		} else {
+			proofStep = append(proofStep, ProofStep{
+				Hash:          curNode.Parent.Left.Data,
+				SiblingOnLeft: true,
+			})
+		}
+		curNode = curNode.Parent
+	}
+
+	return proofStep, nil
 }
 
 // VerifyProof verifies an SPV proof against the expected root.
 func VerifyProof(leaf []byte, path []ProofStep, expectedRoot []byte) bool {
 	// TODO: Lab 2, verify SPV computed root against expected root.
-	panic("Not implemented yet")
+	hash := sha256.Sum256(leaf)
+	curLevel := hash[:]
+	for _, proofStep := range path {
+		var cat []byte
+		if proofStep.SiblingOnLeft {
+			cat = append(proofStep.Hash, curLevel...)
+		} else {
+			cat = append(curLevel, proofStep.Hash...)
+		}
+		catHash := sha256.Sum256(cat)
+		curLevel = catHash[:]
+	}
+	return bytes.Equal(curLevel, expectedRoot)
 }
 
 // CalculateMerkleRoot hashes all transactions and returns the root hex string.

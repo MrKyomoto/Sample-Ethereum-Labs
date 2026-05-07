@@ -117,7 +117,40 @@ func ValidateTransaction(tx *Transaction) error {
 // ValidateTransactions validates and applies a batch of transactions against state.
 func ValidateTransactions(txs []*Transaction, state State) error {
 	// TODO: Lab 2, execute sandbox validation on current state to intercept nonce, overdraft, or signature errors.
-	panic("Not implemented yet")
+	stateCopy := state.Clone()
+	txMapCheck := make(map[string]bool)
+
+	for _, tx := range txs {
+		// NOTE: double tx
+		if txMapCheck[tx.Hash] {
+			return fmt.Errorf("double tx in one txs pool")
+		}
+		txMapCheck[tx.Hash] = true
+
+		res := ValidateTransaction(tx)
+		if res != nil {
+			return res
+		}
+
+		// NOTE: 这样不代表就可以了，还需要检查 余额是否充足
+		if stateCopy[tx.From].Balance < tx.Amount {
+			return fmt.Errorf("balance is not enough")
+		}
+
+		stateCopy[tx.From].Balance -= tx.Amount
+		stateCopy[tx.From].Nonce++
+		stateCopy[tx.To].Balance += tx.Amount
+	}
+
+	for addr := range state {
+		delete(state, addr)
+	}
+	for addr, acct := range stateCopy {
+		copyAcct := *acct
+		state[addr] = &copyAcct
+	}
+
+	return nil
 }
 
 func (tx *Transaction) sign(priv *big.Int) error {
