@@ -50,13 +50,13 @@ func NewMerkleTree(data [][]byte) *MerkleTree {
 		newMerkleNode.isLeft = true
 		leaves = append(leaves, &newMerkleNode)
 	}
-	if len(leaves)%2 == 1 {
-		copiedNode := duplicateNode(leaves[len(leaves)-1])
-		leaves = append(leaves, copiedNode)
-	}
 	nodes := make([]*MerkleNode, len(leaves))
 	copy(nodes, leaves)
 	for len(nodes) > 1 {
+		if len(nodes)%2 == 1 {
+			copiedNode := duplicateNode(nodes[len(nodes)-1])
+			nodes = append(nodes, copiedNode)
+		}
 		var nextLevel []*MerkleNode
 
 		for i := 0; i < len(nodes); i += 2 {
