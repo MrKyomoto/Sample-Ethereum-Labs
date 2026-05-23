@@ -1,7 +1,10 @@
 ﻿package consensus
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -45,10 +48,22 @@ func (e *PoWEngine) ConstructConsensus(blockCandidate *block.Block) *block.Block
 	blockCandidate.Header.Nonce = 0
 
 	targetPrefix := e.prefix()
-	_ = targetPrefix // Prevent unused variable error
+	nonce := 0
 
 	// TODO: Lab 3, implement brute-force loop to find a nonce satisfying the difficulty hash prefix.
-	panic("Not implemented yet")
+	for {
+		hash := calculatePoWHash(blockCandidate, nonce)
+		if len(hash) >= 4 && hash[:4] == targetPrefix {
+			blockCandidate.Header.Hash = hash
+			blockCandidate.Header.Nonce = nonce
+			break
+		}
+
+		nonce++
+	}
+
+	return blockCandidate
+
 }
 
 // ValidateConsensus verifies PoW rules.
@@ -84,7 +99,14 @@ func (e *PoWEngine) ValidateConsensus(blockCandidate *block.Block, prevBlock *bl
 
 func calculatePoWHash(blockCandidate *block.Block, nonce int) string {
 	// TODO: Lab 3, implement double hash algorithm combining block header and nonce.
-	panic("Not implemented yet")
+	baseHash := calculateBlockBaseHash(blockCandidate)
+
+	cat := []byte(baseHash + strconv.Itoa(nonce))
+
+	hash1 := sha256.Sum256(cat)
+	hash2 := sha256.Sum256(hash1[:])
+
+	return hex.EncodeToString(hash2[:])
 }
 
 func calculateBlockBaseHash(blockCandidate *block.Block) string {
