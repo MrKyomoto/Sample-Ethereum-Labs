@@ -65,20 +65,25 @@ func (e *PoSEngine) ConstructConsensus(blockCandidate *block.Block) *block.Block
 		blockCandidate.Body = &block.BlockBody{}
 	}
 
+	if blockCandidate.Header.PrevBlockHash == "" {
+		blockCandidate.Header.Validator = common.Address{}
+		blockCandidate.Header.Hash = calculatePoSHash(blockCandidate)
+		return blockCandidate
+	}
+
+	if len(e.Validators) == 0 {
+		return nil
+	}
 	// TODO: Lab 3, combine seed generation, shuffling, and proposer selection for PoS block creation.
 	slot := computeSlot(blockCandidate.Header.Timestamp)
 	seed := generateSeed(blockCandidate.Header.PrevBlockHash, slot)
-	var validators []validatorEntry
-	for addr, stake := range e.Validators {
-		validators = append(validators, validatorEntry{
-			Address: addr,
-			Stake:   stake,
-		})
-	}
+	validators := e.snapshotValidators()
 
 	shuffled := shuffleValidators(validators, seed)
 	pickedAddr := pickProposer(shuffled, seed)
 	blockCandidate.Header.Validator = pickedAddr
+	seeledHash := calculatePoSHash(blockCandidate)
+	blockCandidate.Header.Hash = seeledHash
 	return blockCandidate
 }
 
@@ -182,7 +187,7 @@ func shuffleValidators(entries []validatorEntry, seed []byte) []validatorEntry {
 // pickProposer selects a proposer based on effective stake using threshold sampling.
 func pickProposer(shuffled []validatorEntry, seed []byte) common.Address {
 	// TODO: Lab 3, select a valid proposer weighted by account stake to influence selection probability.
-	if len(shuffled) == 0{
+	if len(shuffled) == 0 {
 		return common.Address{}
 	}
 	totalStake := 0.0
@@ -192,7 +197,7 @@ func pickProposer(shuffled []validatorEntry, seed []byte) common.Address {
 	for i, v := range shuffled {
 		hash_as_uint64 := hashUint64(seed, uint64(i), v.Address.Bytes())
 
-		threshold := uint64(float64(math.MaxUint64) / totalStake * v.Stake) % maxEffectiveBalance
+		threshold := uint64(float64(math.MaxUint64)/totalStake*v.Stake) % maxEffectiveBalance
 		if hash_as_uint64 > threshold {
 			return v.Address
 		}
